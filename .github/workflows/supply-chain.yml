@@ -32,7 +32,7 @@ jobs:
           mkdir -p dist/sbom
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0.17.9
+        uses: anchore/sbom-action/download-syft@v0.20.9
         with:
           syft-version: v1.16.0
 
@@ -135,7 +135,7 @@ jobs:
           provenance: false
 
       - name: Install Syft
-        uses: anchore/sbom-action/download-syft@v0.17.9
+        uses: anchore/sbom-action/download-syft@v0.20.9
         with:
           syft-version: v1.16.0
 
