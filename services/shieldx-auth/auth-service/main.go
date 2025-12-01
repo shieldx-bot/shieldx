@@ -119,7 +119,20 @@ func main() {
 		log.Fatal("Failed to create RBAC engine:", err)
 	}
 
-	userStore := NewMemoryUserStore()
+	storePath := strings.TrimSpace(getEnv("AUTH_USER_STORE_PATH", ""))
+	var userStore UserStore
+	if storePath != "" {
+		persistentStore, err := NewPersistentUserStore(storePath)
+		if err != nil {
+			log.Fatalf("Failed to initialize persistent user store: %v", err)
+		}
+		userStore = persistentStore
+		log.Printf("💾 Persistent user store enabled (%s)", storePath)
+	} else {
+		userStore = NewMemoryUserStore()
+		log.Printf("💾 Using in-memory user store")
+	}
+
 	mailer := NoopMailer{}
 	bootstrapEmail := getEnv("AUTH_BOOTSTRAP_ADMIN_EMAIL", "admin@example.com")
 	bootstrapPassword := getEnv("AUTH_BOOTSTRAP_ADMIN_PASSWORD", "admin123!")
@@ -241,7 +254,7 @@ func healthHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func loginHandler(jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, users *MemoryUserStore) http.HandlerFunc {
+func loginHandler(jwtManager *auth.JWTManager, sessionManager *auth.SessionManager, users UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -328,7 +341,7 @@ func loginHandler(jwtManager *auth.JWTManager, sessionManager *auth.SessionManag
 	}
 }
 
-func registerHandler(jwtManager *auth.JWTManager, users *MemoryUserStore, mailer Mailer) http.HandlerFunc {
+func registerHandler(jwtManager *auth.JWTManager, users UserStore, mailer Mailer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -563,7 +576,7 @@ func profileHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func usersHandler(store *MemoryUserStore) http.HandlerFunc {
+func usersHandler(store UserStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		users := store.ListUsers()
 		sort.Slice(users, func(i, j int) bool {
