@@ -1,4 +1,4 @@
-package credits
+package main
 
 import (
 	"testing"

@@ -1,3 +1,6 @@
+//go:build enterprise_compliance
+// +build enterprise_compliance
+
 package main
 
 import (
