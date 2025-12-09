@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"encoding/json"
 	"log"
 	"math"
 	"strings"
@@ -308,35 +309,38 @@ func (te *TransactionEngine) AtomicTopupCredits(ctx context.Context, tenantID st
 
 // generateTxID creates unique transaction ID
 func generateTxID() string {
-	return fmt.Sprintf("tx_%d_%d", time.Now().UnixNano(), time.Now().UnixNano()%10000)
+	// Single time snapshot to reduce syscalls
+	now := time.Now().UnixNano()
+	return fmt.Sprintf("tx_%d_%d", now, now%10000)
 }
 
 // maskPaymentInfo removes sensitive payment data (P0 requirement)
 func maskPaymentInfo(info map[string]interface{}) string {
-	masked := make(map[string]interface{})
+	// Build a sanitized shallow copy, removing highly sensitive fields
+	masked := make(map[string]interface{}, len(info))
 	for k, v := range info {
 		switch k {
 		case "card_number", "cvv", "pin":
-			// Completely remove sensitive fields
+			// Drop entirely
 			continue
 		case "cardholder_name":
-			if str, ok := v.(string); ok && len(str) > 2 {
-				masked[k] = str[:2] + "****"
+			if str, ok := v.(string); ok {
+				if l := len(str); l > 2 {
+					masked[k] = str[:2] + "****"
+					break
+				}
 			}
+			// Keep as-is if not a string or too short to mask
+			masked[k] = v
 		default:
 			masked[k] = v
 		}
 	}
-	// Return as JSON string
-	result := "{"
-	first := true
-	for k, v := range masked {
-		if !first {
-			result += ","
-		}
-		first = false
-		result += fmt.Sprintf(`"%s":"%v"`, k, v)
+	// Use JSON marshaling for correctness and performance
+	b, err := json.Marshal(masked)
+	if err != nil {
+		// Fallback to a minimal representation to avoid panics in logging paths
+		return "{}"
 	}
-	result += "}"
-	return result
+	return string(b)
 }
