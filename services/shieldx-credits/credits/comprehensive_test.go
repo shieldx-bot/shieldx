@@ -1,3 +1,6 @@
+//go:build extended
+// +build extended
+
 package main
 
 import (
