@@ -129,6 +129,8 @@ func main() {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
+		// bound body size to protect from abuse
+		r.Body = http.MaxBytesReader(w, r.Body, 4<<10) // 4 KiB
 		var req spawnRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad request", 400)
@@ -146,7 +148,10 @@ func main() {
 				http.Error(w, "no free port", 500)
 				return
 			}
-			dockerID, err = spawnHTTPContainer(r.Context(), tmpl.Image, tmpl.ContainerPort, hostPort, map[string]string{
+			// short timeout on docker operations
+			ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+			defer cancel()
+			dockerID, err = spawnHTTPContainer(ctx, tmpl.Image, tmpl.ContainerPort, hostPort, map[string]string{
 				"shieldx.decoy": "1", "shieldx.tenant": req.Tenant, "shieldx.template": tmpl.Name, "shieldx.id": id,
 			})
 			if err != nil {
@@ -175,6 +180,8 @@ func main() {
 			http.Error(w, "method not allowed", 405)
 			return
 		}
+		// bound body (payload can be large, cap at 1MB)
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		var req analyzeRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad request", 400)
@@ -185,7 +192,10 @@ func main() {
 		path := filepath.Join("data", "sandbox", fmt.Sprintf("%s-%d.log", req.DecoyID, time.Now().Unix()))
 		// Run sandbox via pluggable runner (noop or docker), no-network
 		runner := sandbox.NewFromEnv()
-		out, _ := runner.Run(r.Context(), req.Payload)
+		// enforce analysis timeout
+		ctx, cancel := context.WithTimeout(r.Context(), time.Duration(getenvInt("SANDBOX_TIMEOUT_SECONDS", 5))*time.Second)
+		defer cancel()
+		out, _ := runner.Run(ctx, req.Payload)
 		// Optional WASM analyzer: provide module bytes via env path SANDBOX_WASM_PATH and export name SANDBOX_WASM_FUNC
 		if path := os.Getenv("SANDBOX_WASM_PATH"); path != "" {
 			if b, err := os.ReadFile(path); err == nil {
@@ -251,8 +261,17 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200); _, _ = w.Write([]byte("ok")) })
 
 	addr := fmt.Sprintf(":%d", port)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 3 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      20 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	log.Printf("[decoy-manager] listening on %s (docker=%v)", addr, useDocker)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }
 
 // chooseTemplate picks a template with epsilon-greedy bandit
