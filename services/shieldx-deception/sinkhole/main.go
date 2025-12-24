@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 )
 
 func getenvInt(key string, def int) int {
@@ -56,19 +57,29 @@ func main() {
 		for {
 			_, _, err := c.ReadFromUDP(buf)
 			if err != nil {
-				return
+				// keep the sinkhole alive under transient errors
+				continue
 			}
 		}
 	}()
 	// HTTP sinkhole
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Discard body and respond 204
-		io.Copy(io.Discard, r.Body)
+		// Discard body with a sane cap and respond 204 quickly
+		_, _ = io.CopyN(io.Discard, r.Body, 1<<20)
 		r.Body.Close()
 		w.WriteHeader(204)
 	})
 	addr := fmt.Sprintf(":%d", httpPort)
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 2 * time.Second,
+		ReadTimeout:       3 * time.Second,
+		WriteTimeout:      5 * time.Second,
+		IdleTimeout:       15 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
 	log.Printf("[sinkhole] HTTP :%s", addr)
-	log.Fatal(http.ListenAndServe(addr, mux))
+	log.Fatal(srv.ListenAndServe())
 }
