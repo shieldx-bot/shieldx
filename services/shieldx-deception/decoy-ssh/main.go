@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
@@ -23,7 +24,14 @@ func getenvInt(key string, def int) int {
 
 func main() {
 	port := getenvInt("DECOY_SSH_PORT", 2222)
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	// Concurrency guard to avoid resource exhaustion under heavy probing
+	maxConns := getenvInt("DECOY_SSH_MAX_CONNS", 200)
+	if maxConns <= 0 { maxConns = 200 }
+	sem := make(chan struct{}, maxConns)
+
+	// Use ListenConfig to set TCP keepalive for better resource cleanup
+	var lc net.ListenConfig
+	ln, err := lc.Listen(context.Background(), "tcp", fmt.Sprintf(":%d", port))
 	if err != nil {
 		log.Fatalf("listen: %v", err)
 	}
@@ -37,11 +45,20 @@ func main() {
 		if err != nil {
 			continue
 		}
+		// Acquire slot or immediately close if server at capacity
+		select {
+		case sem <- struct{}{}:
+		default:
+			_ = c.SetDeadline(time.Now().Add(100 * time.Millisecond))
+			_ = c.Close()
+			continue
+		}
 		go func(conn net.Conn) {
-			defer conn.Close()
-			conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			defer func() { <-sem; _ = conn.Close() }()
+			_ = conn.SetWriteDeadline(time.Now().Add(2 * time.Second))
+			// Write banner and keep the illusion for a short, bounded time
 			fmt.Fprintf(conn, "%s\r\n", banner)
-			time.Sleep(2 * time.Second)
+			time.Sleep(1500 * time.Millisecond)
 		}(c)
 	}
 }
