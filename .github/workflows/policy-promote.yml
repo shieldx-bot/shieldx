@@ -24,7 +24,7 @@ jobs:
           if [ ! -f dist/policy-bundle.zip ]; then
             echo "No bundle from previous job; rebuilding"
           fi
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
       - name: Rebuild bundle if missing and extract digest
