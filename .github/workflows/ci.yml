@@ -32,7 +32,7 @@ jobs:
           go mod tidy
           git diff --exit-code || (echo 'Run go mod tidy locally and commit changes' && exit 1)
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v8
         with:
           version: latest
           args: --timeout=5m
