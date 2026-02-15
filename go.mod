@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/cilium/ebpf v0.12.3
 	github.com/cloudflare/circl v1.3.7
-	github.com/docker/docker v28.3.3+incompatible
+	github.com/docker/docker v28.5.1+incompatible
 	github.com/docker/go-connections v0.5.0
 	github.com/firecracker-microvm/firecracker-go-sdk v1.0.0
 	github.com/golang-jwt/jwt/v5 v5.2.1
@@ -65,7 +65,6 @@ require (
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
